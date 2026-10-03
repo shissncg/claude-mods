@@ -1,0 +1,6 @@
+{
+  "name": "prod-guard",
+  "version": "0.1.0",
+  "description": "Asks before Bash commands that look like they touch production",
+  "author": { "name": "shissncg" }
+}

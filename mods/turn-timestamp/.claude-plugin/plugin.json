@@ -1,0 +1,6 @@
+{
+  "name": "turn-timestamp",
+  "version": "0.1.0",
+  "description": "Ends every turn with a dim line: date, time, how long it took and how many tools ran",
+  "author": { "name": "shissncg" }
+}

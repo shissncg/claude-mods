@@ -1,0 +1,7 @@
+{
+  "name": "ci-status",
+  "version": "0.1.0",
+  "description": "A pane of this repo's latest GitHub Actions runs, refreshed while open",
+  "author": { "name": "shissncg" },
+  "types": "./types/index.d.ts"
+}
