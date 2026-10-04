@@ -2,7 +2,10 @@
   "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
   "name": "shissncg-mods",
   "description": "shissncg's Claude Code mods",
-  "owner": { "name": "shissncg", "url": "https://github.com/shissncg" },
+  "owner": {
+    "name": "shissncg",
+    "url": "https://github.com/shissncg"
+  },
   "plugins": [
     {
       "name": "turn-timestamp",
@@ -15,6 +18,12 @@
       "description": "A pane of this repo's latest GitHub Actions runs, refreshed while open",
       "version": "0.1.0",
       "source": "./mods/ci-status"
+    },
+    {
+      "name": "ai-meter-agents",
+      "description": "Feeds each session's state (working, needs you, done) to the ai-meter desk display",
+      "version": "0.1.0",
+      "source": "./mods/ai-meter-agents"
     }
   ]
 }
