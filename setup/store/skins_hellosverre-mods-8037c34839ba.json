@@ -1,0 +1,49 @@
+{
+  "custom": {
+    "neon-cyber": {
+      "name": "neon-cyber",
+      "label": "neon-cyber",
+      "base": "dracula",
+      "palette": {
+        "user": "#ff00ff",
+        "fg": "#e0e0ff",
+        "muted": "#8a8ac0",
+        "surface": "#1a1a2e",
+        "zebra": "#12121c",
+        "read": "#00ffff",
+        "write": "#ff8000",
+        "run": "#ffff00",
+        "search": "#b066ff",
+        "web": "#3399ff",
+        "mcp": "#ff8080",
+        "other": "#c0c0c0",
+        "ok": "#00ff80",
+        "err": "#ff0080",
+        "warn": "#ffc000"
+      },
+      "spinner": [
+        "Jacking in",
+        "Overclocking",
+        "Decrypting",
+        "Uplinking",
+        "Glitching",
+        "Rerouting"
+      ],
+      "done": [
+        "Jacked out",
+        "Decrypted",
+        "Uploaded",
+        "Compiled"
+      ]
+    }
+  },
+  "prefs": {
+    "skin": "neon-cyber",
+    "icons": "unicode",
+    "rail": true,
+    "tables": true,
+    "shimmer": true,
+    "band": true,
+    "clipOutput": false
+  }
+}
