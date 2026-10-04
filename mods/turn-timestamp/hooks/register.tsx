@@ -3,7 +3,8 @@ import type { Register } from 'claude-code'
 
 import type { Stamp } from '../types'
 
-// Each main-loop turn's end, matched to its end-of-turn row by duration.
+// Each main-loop turn's end: matched to the terminal's end-of-turn row by its
+// duration, and elsewhere to the reply's last text block by its text.
 const stamps = atom({ plugin: 'turn-timestamp', key: 'stamps' } as const, [])
 
 function describe(stamp: Stamp): string {
@@ -22,8 +23,8 @@ function took(ms: number): string {
 
 export const register: Register = on => {
   let tools = 0
-  // Durations whose end-of-turn row this module drew; where none is drawn
-  // (the desktop, an SDK host) the stamp is logged as a line of its own.
+  // Durations whose stamp this module drew; one that no row drew (another mod
+  // drew the row, or the turn ended with no reply text) is logged instead.
   const drawn = new Set<number>()
 
   on('prompt.submit', ($, e, next) => {
@@ -52,7 +53,7 @@ export const register: Register = on => {
       if (when === '') {
         when = new Date(await $.clock.now()).toISOString().slice(0, 16).replace('T', ' ') + ' UTC'
       }
-      const stamp: Stamp = { durationMs: e.durationMs, when, tools }
+      const stamp: Stamp = { durationMs: e.durationMs, answer: e.answer.trim(), when, tools }
       await update($, stamps, list => [...list, stamp].slice(-500))
 
       const done = await next(e)
@@ -66,6 +67,31 @@ export const register: Register = on => {
     }
 
     return next(e)
+  })
+
+  // The terminal stamps its end-of-turn row (below); the desktop draws no such
+  // row, so there the stamp goes under the reply's last text block.
+  on('ui.render', { component: 'AssistantMessage' }, async ($, e, next) => {
+    if (e.surface === 'terminal') {
+      return next(e)
+    }
+    const text = e.props.text.trim()
+    const list = await read($, stamps)
+    const stamp = text === '' ? undefined : list.findLast(one => one.answer !== '' && one.answer.endsWith(text))
+    if (stamp === undefined) {
+      return next(e)
+    }
+
+    drawn.add(stamp.durationMs)
+    const { Box, Text } = $.ui.resolve(e)
+    const reply = await next(e)
+
+    return (
+      <Box flexDirection="column">
+        {reply}
+        <Text dimColor>✻ {describe(stamp)}</Text>
+      </Box>
+    )
   })
 
   on('ui.render', { component: 'TurnDuration' }, async ($, e, next) => {

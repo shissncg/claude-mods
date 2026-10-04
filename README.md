@@ -4,7 +4,7 @@ Small [Claude Code mods](https://claude.com/blog/claude-code-mods): TypeScript h
 
 | Mod | What it does |
 | --- | --- |
-| [`turn-timestamp`](mods/turn-timestamp) | Ends every turn with `✻ 2026-10-03 19:05 CDT · 3s · 1 tool call`, so scrollback in multi-day sessions shows when each turn finished. In the terminal it replaces Claude Code's own end-of-turn line (`✻ Churned for 1s`); where that line isn't drawn (the desktop Code tab) it adds its own. Display only. |
+| [`turn-timestamp`](mods/turn-timestamp) | Ends every turn with `✻ 2026-10-03 19:05 CDT · 3s · 1 tool call`, so scrollback in multi-day sessions shows when each turn finished. In the terminal it replaces Claude Code's own end-of-turn line (`✻ Churned for 1s`); in the desktop Code tab, which draws no such line, it goes under Claude's last reply block. Display only. |
 | [`ci-status`](mods/ci-status) | `/ci` opens a pane listing the repo's latest GitHub Actions runs (via `gh`), refreshes every 30s, shows `CI: N running` in the status line and a toast when a run finishes. |
 
 ## Install

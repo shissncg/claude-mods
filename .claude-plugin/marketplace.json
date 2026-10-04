@@ -7,7 +7,7 @@
     {
       "name": "turn-timestamp",
       "description": "Ends every turn with the date, time, duration and tool call count",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "source": "./mods/turn-timestamp"
     },
     {

@@ -1,6 +1,6 @@
 {
   "name": "turn-timestamp",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Ends every turn with the date, time, duration and tool call count",
   "author": { "name": "shissncg" },
   "types": "./types/index.d.ts"
