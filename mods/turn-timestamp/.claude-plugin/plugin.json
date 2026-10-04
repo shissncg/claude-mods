@@ -1,6 +1,7 @@
 {
   "name": "turn-timestamp",
-  "version": "0.1.0",
-  "description": "Ends every turn with a dim line: date, time, how long it took and how many tools ran",
-  "author": { "name": "shissncg" }
+  "version": "0.2.0",
+  "description": "Replaces the end-of-turn line with the date, time, duration and tool call count",
+  "author": { "name": "shissncg" },
+  "types": "./types/index.d.ts"
 }
