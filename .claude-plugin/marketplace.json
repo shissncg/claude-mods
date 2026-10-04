@@ -1,0 +1,20 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "shissncg-mods",
+  "description": "shissncg's Claude Code mods",
+  "owner": { "name": "shissncg", "url": "https://github.com/shissncg" },
+  "plugins": [
+    {
+      "name": "turn-timestamp",
+      "description": "Ends every turn with the date, time, duration and tool call count",
+      "version": "0.3.0",
+      "source": "./mods/turn-timestamp"
+    },
+    {
+      "name": "ci-status",
+      "description": "A pane of this repo's latest GitHub Actions runs, refreshed while open",
+      "version": "0.1.0",
+      "source": "./mods/ci-status"
+    }
+  ]
+}

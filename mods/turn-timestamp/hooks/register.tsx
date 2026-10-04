@@ -6,6 +6,12 @@ import type { Stamp } from '../types'
 // Each main-loop turn's end, matched to its end-of-turn row by duration.
 const stamps = atom({ plugin: 'turn-timestamp', key: 'stamps' } as const, [])
 
+function describe(stamp: Stamp): string {
+  const parts = [stamp.when, took(stamp.durationMs)]
+  if (stamp.tools > 0) parts.push(`${stamp.tools} tool call${stamp.tools === 1 ? '' : 's'}`)
+  return parts.join(' · ')
+}
+
 function took(ms: number): string {
   const seconds = Math.round(ms / 1000)
   if (seconds < 60) return `${seconds}s`
@@ -16,6 +22,9 @@ function took(ms: number): string {
 
 export const register: Register = on => {
   let tools = 0
+  // Durations whose end-of-turn row this module drew; where none is drawn
+  // (the desktop, an SDK host) the stamp is logged as a line of its own.
+  const drawn = new Set<number>()
 
   on('prompt.submit', ($, e, next) => {
     tools = 0
@@ -45,6 +54,15 @@ export const register: Register = on => {
       }
       const stamp: Stamp = { durationMs: e.durationMs, when, tools }
       await update($, stamps, list => [...list, stamp].slice(-500))
+
+      const done = await next(e)
+      void (async () => {
+        await $.clock.sleep(1500)
+        if (!drawn.has(stamp.durationMs)) {
+          $.ui.log(`✻ ${describe(stamp)}`)
+        }
+      })()
+      return done
     }
 
     return next(e)
@@ -57,10 +75,9 @@ export const register: Register = on => {
       return next(e)
     }
 
+    drawn.add(stamp.durationMs)
     const { Text } = $.ui.resolve(e)
-    const parts = [stamp.when, took(stamp.durationMs)]
-    if (stamp.tools > 0) parts.push(`${stamp.tools} tool call${stamp.tools === 1 ? '' : 's'}`)
 
-    return <Text dimColor>✻ {parts.join(' · ')}</Text>
+    return <Text dimColor>✻ {describe(stamp)}</Text>
   })
 }

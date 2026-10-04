@@ -1,7 +1,7 @@
 {
   "name": "turn-timestamp",
-  "version": "0.2.0",
-  "description": "Replaces the end-of-turn line with the date, time, duration and tool call count",
+  "version": "0.3.0",
+  "description": "Ends every turn with the date, time, duration and tool call count",
   "author": { "name": "shissncg" },
   "types": "./types/index.d.ts"
 }
