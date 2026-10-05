@@ -41,11 +41,16 @@ curl -fsSL "$RAW/install_other_tools.py" -o "$TMP/install_other_tools.py"
 # installed, and a hook file for a missing CLI is harmless.
 python3 "$TMP/install_other_tools.py"
 
-# Claude Code: the plugin carries the same hooks.
-if command -v claude >/dev/null 2>&1; then
-    claude plugin marketplace add shissncg/claude-mods >/dev/null 2>&1 || true
-    claude plugin install ai-meter-agents@shissncg-mods >/dev/null 2>&1 \
+# Claude Code: the plugin carries the same hooks. Benchmark images link it as
+# claude-benchmark; it's the same binary and the same ~/.claude.
+CLAUDE=""
+for name in claude claude-benchmark; do
+    if command -v "$name" >/dev/null 2>&1; then CLAUDE="$name"; break; fi
+done
+if [ -n "$CLAUDE" ]; then
+    "$CLAUDE" plugin marketplace add shissncg/claude-mods >/dev/null 2>&1 || true
+    "$CLAUDE" plugin install ai-meter-agents@shissncg-mods >/dev/null 2>&1 \
         && echo "claude: ai-meter-agents plugin installed" \
-        || echo "claude: plugin install failed; run: claude plugin install ai-meter-agents@shissncg-mods"
+        || echo "claude: plugin install failed; run: $CLAUDE plugin install ai-meter-agents@shissncg-mods"
 fi
 echo "ai-meter: reporting to $AI_METER_HUB_URL as ${AI_METER_MACHINE:-${CODER_WORKSPACE_NAME:-$(hostname -s)}}"
