@@ -29,6 +29,14 @@ One script serves every CLI; they differ only in spelling:
 
 Usage: agent_state.py [--provider NAME] [--event NAME]
 
+Hub: when a hub is configured (~/.config/claude-usage-monitor/hub.json with
+"url" and "write_token", or AI_METER_HUB_URL / AI_METER_HUB_TOKEN), each
+visible change is also sent to it from a detached background process, so a
+slow network never holds up the session. Only the project folder's name, the
+state, the tool label and a 40-character prompt snippet leave the machine.
+The machine is named by AI_METER_MACHINE, else CODER_WORKSPACE_NAME, else the
+short hostname.
+
 Always exits 0, and prints nothing except "{}" for Antigravity, whose hooks
 must answer with a JSON object ({} = no decision). SessionStart and
 UserPromptSubmit stdout would reach the model, and exit 2 means "block" in
@@ -40,13 +48,19 @@ from __future__ import annotations
 import json
 import os
 import re
+import socket
 import subprocess
 import sys
 import time
+import urllib.request
 from pathlib import Path
 from urllib.parse import urlparse
 
 AGENTS_DIR = Path.home() / ".config" / "claude-usage-monitor" / "agents"
+HUB_CONFIG = Path.home() / ".config" / "claude-usage-monitor" / "hub.json"
+HUB_RESEND_S = 300      # keep a quiet session alive on the hub
+HUB_TIMEOUT_S = 5
+HUB_PROMPT_CHARS = 40
 PROVIDERS = ("claude", "codex", "grok", "gemini")
 # Process names to look for when finding the session's own CLI process.
 PROCESS_NAMES = {"claude": ("claude",), "codex": ("codex",), "grok": ("grok", "agent"),
@@ -219,6 +233,52 @@ def apply_event(state: dict, ev: dict, now: float) -> dict | None:
     return state
 
 
+def hub_config() -> dict | None:
+    """{"url", "token", "machine"} when a hub is configured, else None."""
+    try:
+        conf = json.loads(HUB_CONFIG.read_text())
+    except (OSError, ValueError):
+        conf = {}
+    url = os.environ.get("AI_METER_HUB_URL") or conf.get("url")
+    token = os.environ.get("AI_METER_HUB_TOKEN") or conf.get("write_token")
+    if not url or not token:
+        return None
+    machine = (os.environ.get("AI_METER_MACHINE") or conf.get("machine")
+               or os.environ.get("CODER_WORKSPACE_NAME") or socket.gethostname().split(".")[0])
+    return {"url": url.rstrip("/"), "token": token, "machine": machine}
+
+
+def hub_update(state: dict | None, file_id: str, machine: str, now: float) -> dict:
+    """What the hub gets for one session: no paths, a short prompt."""
+    if state is None:
+        return {"id": file_id, "machine": machine, "deleted": True, "updated": now}
+    return {
+        "id": file_id, "machine": machine,
+        "provider": state.get("provider", "claude"),
+        "project": os.path.basename(str(state.get("cwd", "")).rstrip("/")),
+        "state": state["state"], "detail": state.get("detail", ""),
+        "prompt": shorten(state.get("prompt", ""), HUB_PROMPT_CHARS),
+        "since": state.get("since", now), "updated": state.get("updated", now),
+    }
+
+
+def send_to_hub(hub: dict, update: dict) -> None:
+    """POST from a detached child so the hook returns at once."""
+    subprocess.Popen(
+        [sys.executable, os.path.abspath(__file__), "--send", hub["url"], json.dumps(update)],
+        env={**os.environ, "AI_METER_HUB_TOKEN": hub["token"]},
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        start_new_session=True, close_fds=True)
+
+
+def post_update(url: str, body: str) -> None:
+    request = urllib.request.Request(
+        f"{url}/v1/sessions", data=body.encode(), method="POST",
+        headers={"Authorization": f"Bearer {os.environ.get('AI_METER_HUB_TOKEN', '')}",
+                 "Content-Type": "application/json", "User-Agent": "ai-meter-agents"})
+    urllib.request.urlopen(request, timeout=HUB_TIMEOUT_S).read()
+
+
 def parse_args(argv: list[str]) -> tuple[str, str | None]:
     provider, event = "claude", None
     for flag, value in zip(argv, argv[1:]):
@@ -242,9 +302,14 @@ def main(provider: str, event_name: str | None) -> None:
     except (OSError, ValueError):
         state = {}
 
-    new_state = apply_event(state, ev, time.time())
+    now = time.time()
+    hub = hub_config()
+    shown_before = (state.get("state"), state.get("detail"), state.get("prompt"))
+    new_state = apply_event(state, ev, now)
     if new_state is None:
         path.unlink(missing_ok=True)
+        if hub:
+            send_to_hub(hub, hub_update(None, file_id, hub["machine"], now))
         return
     if "state" not in new_state:
         return  # an event this script doesn't track, for a session it hasn't seen
@@ -256,6 +321,12 @@ def main(provider: str, event_name: str | None) -> None:
     if "pid" not in new_state:
         new_state["pid"] = session_pid(provider)
 
+    # Tell the hub when something visible changed, or to keep a quiet session alive.
+    shown_now = (new_state.get("state"), new_state.get("detail"), new_state.get("prompt"))
+    if hub and (shown_now != shown_before or now - new_state.get("hub_sent", 0) > HUB_RESEND_S):
+        new_state["hub_sent"] = now
+        send_to_hub(hub, hub_update(new_state, file_id, hub["machine"], now))
+
     AGENTS_DIR.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(f".{os.getpid()}.tmp")
     tmp.write_text(json.dumps(new_state))
@@ -263,6 +334,13 @@ def main(provider: str, event_name: str | None) -> None:
 
 
 if __name__ == "__main__":
+    if sys.argv[1:2] == ["--send"]:
+        # The detached child: one POST, errors ignored.
+        try:
+            post_update(sys.argv[2], sys.argv[3])
+        except Exception:
+            pass
+        sys.exit(0)
     provider, event_name = parse_args(sys.argv[1:])
     try:
         main(provider, event_name)

@@ -15,11 +15,15 @@ hooks from their own config files, so this script:
 Run it again after editing agent_state.py; it replaces only its own entries.
 Every changed file is backed up once to <file>.bak-ai-meter first.
 
-Usage: install_other_tools.py [--uninstall]
+Usage: install_other_tools.py [--uninstall] [--only-present]
+
+--only-present skips CLIs whose config folder doesn't exist here (for a
+workspace that has only some of them).
 """
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -29,6 +33,8 @@ SOURCE = Path(__file__).resolve().parent / "hooks" / "agent_state.py"
 INSTALLED = HOME / ".config" / "claude-usage-monitor" / "hooks" / "agent_state.py"
 MARKER = "claude-usage-monitor/hooks/agent_state.py"   # identifies our entries
 TIMEOUT = 5
+# The system python3 on macOS; whatever runs this installer elsewhere.
+PYTHON = "/usr/bin/python3" if os.path.exists("/usr/bin/python3") else sys.executable
 
 CODEX_FILE = HOME / ".codex" / "hooks.json"
 CODEX_EVENTS = ("SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse",
@@ -47,7 +53,7 @@ AGY_FLAT = ("PreInvocation", "Stop")
 def command(provider: str, event: str | None = None) -> str:
     # `|| true`: these CLIs read exit 2 as "block"; a missing script must not.
     extra = f" --event {event}" if event else ""
-    return f'/usr/bin/python3 "{INSTALLED}" --provider {provider}{extra} || true'
+    return f'{PYTHON} "{INSTALLED}" --provider {provider}{extra} || true'
 
 
 def handler(provider: str, event: str | None = None) -> dict:
@@ -113,11 +119,16 @@ def agy(install: bool) -> str:
 
 def main() -> None:
     install = "--uninstall" not in sys.argv[1:]
+    only_present = "--only-present" in sys.argv[1:]
     if install:
         INSTALLED.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(SOURCE, INSTALLED)
         print(f"copied {SOURCE.name} -> {INSTALLED}")
-    for step in (codex, grok, agy):
+    homes = {codex: HOME / ".codex", grok: HOME / ".grok", agy: HOME / ".gemini"}
+    for step, home in homes.items():
+        if only_present and not home.is_dir():
+            print(f"{step.__name__}: not on this machine, skipped")
+            continue
         print(step(install))
     if not install:
         INSTALLED.unlink(missing_ok=True)
