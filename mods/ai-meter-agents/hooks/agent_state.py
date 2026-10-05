@@ -1,22 +1,39 @@
 #!/usr/bin/env python3
-"""Record what this Claude Code session is doing, for the ai-meter board.
+"""Record what an AI coding session is doing, for the ai-meter board.
 
 Every hook event rewrites one JSON file per session in AGENTS_DIR. The ai-meter
 daemon (github.com/shissncg/ai-meter, daemon/agent_feed.py) reads the files and
 shows them on the board's Agents page. File fields:
 
-  id       session id
-  cwd      working directory of the session
-  state    working | needs | done | idle
-  detail   what the state is about: the current tool, or why it needs you
-  prompt   the last prompt you sent, shortened
-  since    epoch seconds when the session entered its current state
-  updated  epoch seconds of the last hook event
-  pid      the Claude Code process, so the daemon can drop dead sessions
+  id        session id
+  provider  claude | codex | grok | gemini (Antigravity)
+  cwd       working directory of the session
+  state     working | needs | done | idle
+  detail    what the state is about: the current tool, or why it needs you
+  prompt    the last prompt you sent, shortened
+  since     epoch seconds when the session entered its current state
+  updated   epoch seconds of the last hook event
+  pid       the session's CLI process, so the daemon can drop dead sessions
 
-Prints nothing and always exits 0: SessionStart and UserPromptSubmit stdout
-would be added to the model's context, and a failing hook must never get in
-the session's way. Runs on the system python3 (3.9 on macOS).
+One script serves every CLI; they differ only in spelling:
+
+  claude   Claude Code plugin hooks, snake_case fields, event in hook_event_name
+  codex    ~/.codex/hooks.json, Claude-style fields, plus PermissionRequest
+  grok     ~/.grok/hooks/*.json, camelCase fields (sessionId, toolName, toolInput)
+  gemini   Antigravity ~/.gemini/config/hooks.json: camelCase (conversationId,
+           workspacePaths, toolCall with a ready-made toolSummary), no event
+           name in the payload (pass --event). Only PreInvocation, PostToolUse
+           and Stop are hooked: Antigravity reads any PreToolUse answer as a
+           decision and has no "no opinion" one, so even {} would deny every
+           tool call. The tool is therefore named after it runs.
+
+Usage: agent_state.py [--provider NAME] [--event NAME]
+
+Always exits 0, and prints nothing except "{}" for Antigravity, whose hooks
+must answer with a JSON object ({} = no decision). SessionStart and
+UserPromptSubmit stdout would reach the model, and exit 2 means "block" in
+these CLIs, so a failing hook must never get in a session's way. Runs on the
+system python3 (3.9 on macOS).
 """
 from __future__ import annotations
 
@@ -30,6 +47,21 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 AGENTS_DIR = Path.home() / ".config" / "claude-usage-monitor" / "agents"
+PROVIDERS = ("claude", "codex", "grok", "gemini")
+# Process names to look for when finding the session's own CLI process.
+PROCESS_NAMES = {"claude": ("claude",), "codex": ("codex",), "grok": ("grok", "agent"),
+                 "gemini": ("agy",)}
+# Tool names each CLI uses, mapped onto Claude Code's.
+TOOL_ALIASES = {
+    "run_terminal_command": "Bash", "run_command": "Bash", "shell": "Bash",
+    "exec_command": "Bash", "local_shell": "Bash",
+    "read_file": "Read", "view_file": "Read",
+    "write": "Write", "write_to_file": "Write",
+    "search_replace": "Edit", "apply_patch": "Edit", "replace_file_content": "Edit",
+    "list_dir": "LS", "grep_search": "Grep", "find_by_name": "Glob",
+    "web_fetch": "WebFetch", "read_url_content": "WebFetch", "search_web": "WebSearch",
+    "multi_replace_file_content": "Edit", "invoke_subagent": "Agent",
+}
 
 
 def shorten(text: str, limit: int) -> str:
@@ -39,23 +71,33 @@ def shorten(text: str, limit: int) -> str:
 
 def tool_label(name: str, tool_input: dict) -> str:
     """A short "Tool: target" line, e.g. "Bash: Build firmware" or "Edit: ui.cpp"."""
-    def field(key: str) -> str:
-        value = tool_input.get(key)
-        return value if isinstance(value, str) else ""
+    def field(*keys: str) -> str:
+        for key in keys:
+            value = tool_input.get(key)
+            if isinstance(value, list):
+                value = " ".join(str(v) for v in value)
+            if isinstance(value, str) and value.strip():
+                return value
+        return ""
 
+    summary = tool_input.get("toolSummary")      # Antigravity: "Read ROADMAP.md"
+    if isinstance(summary, str) and summary.strip():
+        return summary
     if name.startswith("mcp__"):
         # mcp__<server>__<tool>: server names are often opaque ids, so keep the tool.
         return name.split("__")[-1]
+    name = TOOL_ALIASES.get(name, name)
     if name == "Bash":
-        target = field("description") or field("command")
+        target = field("description", "command", "CommandLine", "cmd")
     elif name in ("Read", "Edit", "Write", "NotebookEdit"):
-        target = os.path.basename(field("file_path") or field("notebook_path"))
+        target = os.path.basename(field("file_path", "path", "notebook_path", "AbsolutePath",
+                                        "TargetFile", "filename"))
     elif name in ("Grep", "Glob"):
-        target = field("pattern")
+        target = field("pattern", "Query", "query")
     elif name == "WebFetch":
-        target = urlparse(field("url")).netloc
+        target = urlparse(field("url", "Url")).netloc
     elif name == "WebSearch":
-        target = field("query")
+        target = field("query", "Query")
     elif name in ("Agent", "Task"):
         target = field("description")
     elif name == "Skill":
@@ -65,10 +107,31 @@ def tool_label(name: str, tool_input: dict) -> str:
     return f"{name}: {target}" if target else name
 
 
-def claude_pid() -> int | None:
-    """The nearest ancestor process named claude, i.e. the session's own process."""
+def normalize(event: dict, provider: str, event_name: str | None) -> dict:
+    """The fields this script uses, whichever spelling the CLI sent."""
+    tool = event.get("toolCall") if isinstance(event.get("toolCall"), dict) else {}
+    paths = event.get("workspacePaths")
+    return {
+        "event": event_name or event.get("hook_event_name") or "",
+        "session": event.get("session_id") or event.get("sessionId") or event.get("conversationId") or "",
+        "cwd": event.get("cwd") or event.get("workspaceRoot")
+               or (paths[0] if isinstance(paths, list) and paths else ""),
+        "tool": event.get("tool_name") or event.get("toolName") or tool.get("name") or "",
+        "input": event.get("tool_input") or event.get("toolInput") or tool.get("args") or {},
+        "prompt": event.get("prompt") or "",
+        "source": event.get("source") or "",
+        "kind": event.get("notification_type") or event.get("notificationType") or "",
+        "message": event.get("message") or "",
+        # Antigravity has no passive PreToolUse, so PostToolUse names the tool.
+        "label_after": provider == "gemini",
+    }
+
+
+def session_pid(provider: str) -> int | None:
+    """The nearest ancestor process named like the provider's CLI."""
+    names = PROCESS_NAMES.get(provider, ())
     pid = os.getppid()
-    for _ in range(6):
+    for _ in range(8):
         if pid <= 1:
             return None
         try:
@@ -81,7 +144,7 @@ def claude_pid() -> int | None:
         if not out:
             return None
         ppid, _, comm = out.partition(" ")
-        if os.path.basename(comm.strip()).lower().startswith("claude"):
+        if os.path.basename(comm.strip()).lower().startswith(names):
             return pid
         try:
             pid = int(ppid)
@@ -90,9 +153,9 @@ def claude_pid() -> int | None:
     return None
 
 
-def apply_event(state: dict, event: dict, now: float) -> dict | None:
+def apply_event(state: dict, ev: dict, now: float) -> dict | None:
     """Return the session's new state for one hook event, or None to delete it."""
-    name = event.get("hook_event_name", "")
+    name = ev["event"]
     if name == "SessionEnd":
         return None
 
@@ -103,37 +166,51 @@ def apply_event(state: dict, event: dict, now: float) -> dict | None:
             state["since"] = state.get("turn", now) if new_state == "working" else now
         state["detail"] = detail
 
-    if name == "SessionStart":
-        # A compaction restarts the session mid-turn; keep whatever it was doing.
-        if event.get("source") != "compact" or "state" not in state:
-            enter("idle", "")
-    elif name == "UserPromptSubmit":
-        state["prompt"] = shorten(event.get("prompt", ""), 120)
+    def start_turn() -> None:
         state["turn"] = now
         state["tool"] = "Thinking"
         state.pop("state", None)
         enter("working", "Thinking")
+
+    if name == "SessionStart":
+        # A compaction restarts the session mid-turn; keep whatever it was doing.
+        if ev["source"] != "compact" or "state" not in state:
+            enter("idle", "")
+    elif name == "UserPromptSubmit":
+        state["prompt"] = shorten(ev["prompt"], 120)
+        start_turn()
+    elif name == "PreInvocation":
+        # Antigravity has no prompt event; a model call outside a turn starts one.
+        if state.get("state") != "working":
+            start_turn()
     elif name == "PreToolUse":
-        tool = event.get("tool_name", "")
+        tool = ev["tool"]
         if tool == "AskUserQuestion":
             enter("needs", "Question for you")
         elif tool == "ExitPlanMode":
             enter("needs", "Plan ready for review")
         else:
-            state["tool"] = tool_label(tool, event.get("tool_input") or {})
+            if state.get("state") != "working" and "turn" not in state:
+                state["turn"] = now
+            state["tool"] = tool_label(tool, ev["input"] if isinstance(ev["input"], dict) else {})
             enter("working", state["tool"])
     elif name == "PostToolUse":
         if state.get("state") == "needs":
             enter("working", state.get("tool", ""))
+        elif ev["label_after"] and ev["tool"]:
+            state["tool"] = tool_label(ev["tool"], ev["input"] if isinstance(ev["input"], dict) else {})
+            enter("working", state["tool"])
+    elif name == "PermissionRequest":
+        label = TOOL_ALIASES.get(ev["tool"], ev["tool"])
+        enter("needs", f"Allow {label}?" if label else "Permission needed")
     elif name == "Notification":
-        kind = event.get("notification_type", "")
-        message = event.get("message", "")
-        if kind == "permission_prompt" or "permission" in message.lower():
-            match = re.search(r"permission to use (.+)$", message)
+        if ev["kind"] == "permission_prompt" or "permission" in ev["message"].lower():
+            match = re.search(r"permission to use (.+)$", ev["message"])
             enter("needs", f"Allow {match.group(1)}?" if match else "Permission needed")
-        elif kind == "elicitation_dialog":
+        elif ev["kind"] == "elicitation_dialog":
             enter("needs", "Input requested")
     elif name == "Stop":
+        state.pop("turn", None)
         enter("done", "")
     else:
         return state
@@ -142,27 +219,42 @@ def apply_event(state: dict, event: dict, now: float) -> dict | None:
     return state
 
 
-def main() -> None:
-    event = json.load(sys.stdin)
-    session_id = re.sub(r"[^A-Za-z0-9_-]", "", str(event.get("session_id", "")))
+def parse_args(argv: list[str]) -> tuple[str, str | None]:
+    provider, event = "claude", None
+    for flag, value in zip(argv, argv[1:]):
+        if flag == "--provider" and value in PROVIDERS:
+            provider = value
+        elif flag == "--event":
+            event = value
+    return provider, event
+
+
+def main(provider: str, event_name: str | None) -> None:
+    ev = normalize(json.load(sys.stdin), provider, event_name)
+    session_id = re.sub(r"[^A-Za-z0-9_-]", "", str(ev["session"]))
     if not session_id:
         return
-    path = AGENTS_DIR / f"{session_id}.json"
+    # Prefix non-Claude ids so a session id can't collide across CLIs.
+    file_id = session_id if provider == "claude" else f"{provider}-{session_id}"
+    path = AGENTS_DIR / f"{file_id}.json"
     try:
         state = json.loads(path.read_text())
     except (OSError, ValueError):
         state = {}
 
-    new_state = apply_event(state, event, time.time())
+    new_state = apply_event(state, ev, time.time())
     if new_state is None:
         path.unlink(missing_ok=True)
         return
+    if "state" not in new_state:
+        return  # an event this script doesn't track, for a session it hasn't seen
 
-    new_state["id"] = session_id
-    if event.get("cwd"):
-        new_state["cwd"] = event["cwd"]
+    new_state["id"] = file_id
+    new_state["provider"] = provider
+    if ev["cwd"]:
+        new_state["cwd"] = ev["cwd"]
     if "pid" not in new_state:
-        new_state["pid"] = claude_pid()
+        new_state["pid"] = session_pid(provider)
 
     AGENTS_DIR.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(f".{os.getpid()}.tmp")
@@ -171,8 +263,11 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    provider, event_name = parse_args(sys.argv[1:])
     try:
-        main()
+        main(provider, event_name)
     except Exception:
         pass
+    if provider == "gemini":
+        print("{}")
     sys.exit(0)

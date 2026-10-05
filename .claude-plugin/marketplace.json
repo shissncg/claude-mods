@@ -21,8 +21,8 @@
     },
     {
       "name": "ai-meter-agents",
-      "description": "Feeds each session's state (working, needs you, done) to the ai-meter desk display",
-      "version": "0.1.0",
+      "description": "Feeds each AI coding session's state (working, needs you, done) to the ai-meter desk display, from Claude Code and, via install_other_tools.py, Codex, Grok and Antigravity",
+      "version": "0.2.0",
       "source": "./mods/ai-meter-agents"
     }
   ]
