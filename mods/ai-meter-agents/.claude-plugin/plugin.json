@@ -1,6 +1,6 @@
 {
   "name": "ai-meter-agents",
   "version": "0.2.0",
-  "description": "Feeds each Claude Code session's state (working, needs you, done) to the ai-meter desk display",
+  "description": "Feeds each AI coding session's state (working, needs you, done) to the ai-meter desk display: Claude Code via this plugin, Codex, Grok and Antigravity via install_other_tools.py",
   "author": { "name": "shissncg" }
 }
