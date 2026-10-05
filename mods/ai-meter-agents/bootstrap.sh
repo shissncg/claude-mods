@@ -9,8 +9,9 @@
 #   curl -fsSL https://raw.githubusercontent.com/shissncg/claude-mods/main/mods/ai-meter-agents/bootstrap.sh | sh
 #
 # It writes ~/.config/claude-usage-monitor/hub.json (mode 600), installs the
-# hook script, adds hooks for whichever of Codex / Grok / Antigravity are
-# present, and installs the Claude Code plugin when `claude` is on PATH.
+# hook script, adds hooks for Codex, Grok and Antigravity (whether or not
+# they are installed yet), and installs the Claude Code plugin when `claude`
+# is on PATH, so run it after the harnesses are installed.
 # Idempotent: safe to run on every workspace start. Needs python3 and curl.
 set -eu
 
@@ -36,7 +37,9 @@ umask 022
 mkdir -p "$TMP/hooks"
 curl -fsSL "$RAW/hooks/agent_state.py" -o "$TMP/hooks/agent_state.py"
 curl -fsSL "$RAW/install_other_tools.py" -o "$TMP/install_other_tools.py"
-python3 "$TMP/install_other_tools.py" --only-present
+# Every CLI, present or not: in a Coder template this can run before they are
+# installed, and a hook file for a missing CLI is harmless.
+python3 "$TMP/install_other_tools.py"
 
 # Claude Code: the plugin carries the same hooks.
 if command -v claude >/dev/null 2>&1; then
