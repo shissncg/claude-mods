@@ -24,6 +24,12 @@
       "description": "Feeds each AI coding session's state (working, needs you, done) to the SI Somewhere desk display, from Claude Code and, via install_other_tools.py, Codex, Grok and Antigravity",
       "version": "0.3.0",
       "source": "./mods/sisomewhere-agents"
+    },
+    {
+      "name": "sisomewhere-usage",
+      "description": "Saves Claude Code's plan limits (5-hour and weekly) to a local file for the SI Somewhere agent",
+      "version": "0.1.0",
+      "source": "./mods/sisomewhere-usage"
     }
   ]
 }

@@ -1,0 +1,6 @@
+{
+  "name": "sisomewhere-usage",
+  "version": "0.1.0",
+  "description": "Saves Claude Code's plan limits (5-hour and weekly) to a local file for the SI Somewhere agent",
+  "author": { "name": "shissncg" }
+}
