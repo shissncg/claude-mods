@@ -13,7 +13,7 @@ hooks from their own config files, so this script:
        agy     ~/.gemini/config/hooks.json     (merged under "sisomewhere-agents")
 
 Run it again after editing agent_state.py; it replaces only its own entries.
-Every changed file is backed up once to <file>.bak-SI Somewhere first.
+Every changed file is backed up once to <file>.bak-sisomewhere first.
 
 Usage: install_other_tools.py [--uninstall] [--only-present]
 
@@ -78,7 +78,7 @@ def load(path: Path) -> dict:
 
 
 def save(path: Path, data: dict) -> None:
-    backup = path.with_name(path.name + ".bak-SI Somewhere")
+    backup = path.with_name(path.name + ".bak-sisomewhere")
     if path.exists() and not backup.exists():
         shutil.copy2(path, backup)
     path.parent.mkdir(parents=True, exist_ok=True)
