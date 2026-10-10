@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""Feed Codex, Grok and Antigravity sessions to the ai-meter Agents page too.
+"""Feed Codex, Grok and Antigravity sessions to the SI Somewhere Agents page too.
 
 Claude Code gets the feed from this plugin's own hooks. The other CLIs take
 hooks from their own config files, so this script:
 
-  1. copies hooks/agent_state.py to ~/.config/claude-usage-monitor/hooks/, a
+  1. copies hooks/agent_state.py to ~/.config/sisomewhere/hooks/, a
      path that doesn't move with this checkout's branch;
   2. adds a hook entry per event to each CLI's config, next to whatever is
      already there:
        codex   ~/.codex/hooks.json             (merged; other hooks kept)
-       grok    ~/.grok/hooks/ai-meter-agents.json   (its own file)
-       agy     ~/.gemini/config/hooks.json     (merged under "ai-meter-agents")
+       grok    ~/.grok/hooks/sisomewhere-agents.json   (its own file)
+       agy     ~/.gemini/config/hooks.json     (merged under "sisomewhere-agents")
 
 Run it again after editing agent_state.py; it replaces only its own entries.
-Every changed file is backed up once to <file>.bak-ai-meter first.
+Every changed file is backed up once to <file>.bak-SI Somewhere first.
 
 Usage: install_other_tools.py [--uninstall] [--only-present]
 
@@ -30,8 +30,9 @@ from pathlib import Path
 
 HOME = Path.home()
 SOURCE = Path(__file__).resolve().parent / "hooks" / "agent_state.py"
-INSTALLED = HOME / ".config" / "claude-usage-monitor" / "hooks" / "agent_state.py"
-MARKER = "claude-usage-monitor/hooks/agent_state.py"   # identifies our entries
+INSTALLED = HOME / ".config" / "sisomewhere" / "hooks" / "agent_state.py"
+# Identifies our entries, including ones installed before the SI Somewhere rename.
+MARKERS = ("sisomewhere/hooks/agent_state.py", "claude-usage-monitor/hooks/agent_state.py")
 TIMEOUT = 5
 # The system python3 on macOS; whatever runs this installer elsewhere.
 PYTHON = "/usr/bin/python3" if os.path.exists("/usr/bin/python3") else sys.executable
@@ -39,11 +40,13 @@ PYTHON = "/usr/bin/python3" if os.path.exists("/usr/bin/python3") else sys.execu
 CODEX_FILE = HOME / ".codex" / "hooks.json"
 CODEX_EVENTS = ("SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse",
                 "PermissionRequest", "Stop", "SessionEnd")
-GROK_FILE = HOME / ".grok" / "hooks" / "ai-meter-agents.json"
+GROK_FILE = HOME / ".grok" / "hooks" / "sisomewhere-agents.json"
+LEGACY_GROK_FILE = HOME / ".grok" / "hooks" / "ai-meter-agents.json"
 GROK_EVENTS = ("SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse",
                "Notification", "Stop", "SessionEnd")
 AGY_FILE = HOME / ".gemini" / "config" / "hooks.json"
-AGY_NAME = "ai-meter-agents"
+AGY_NAME = "sisomewhere-agents"
+LEGACY_AGY_NAME = "ai-meter-agents"
 AGY_FLAT = ("PreInvocation", "Stop")
 # Never PreToolUse: Antigravity reads its answer as a decision, with no
 # "no opinion" value, so even {} denies every tool call. PostToolUse is
@@ -61,7 +64,7 @@ def handler(provider: str, event: str | None = None) -> dict:
 
 
 def is_ours(group: dict) -> bool:
-    return any(MARKER in str(h.get("command", "")) for h in group.get("hooks", []))
+    return any(m in str(h.get("command", "")) for h in group.get("hooks", []) for m in MARKERS)
 
 
 def load(path: Path) -> dict:
@@ -75,7 +78,7 @@ def load(path: Path) -> dict:
 
 
 def save(path: Path, data: dict) -> None:
-    backup = path.with_name(path.name + ".bak-ai-meter")
+    backup = path.with_name(path.name + ".bak-SI Somewhere")
     if path.exists() and not backup.exists():
         shutil.copy2(path, backup)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -97,6 +100,7 @@ def codex(install: bool) -> str:
 
 
 def grok(install: bool) -> str:
+    LEGACY_GROK_FILE.unlink(missing_ok=True)
     if not install:
         GROK_FILE.unlink(missing_ok=True)
         return f"grok: removed {GROK_FILE}"
@@ -108,6 +112,7 @@ def grok(install: bool) -> str:
 def agy(install: bool) -> str:
     data = load(AGY_FILE)
     data.pop(AGY_NAME, None)
+    data.pop(LEGACY_AGY_NAME, None)
     if install:
         entry: dict = {"PostToolUse": [{"matcher": "*", "hooks": [handler("gemini", "PostToolUse")]}]}
         for event in AGY_FLAT:

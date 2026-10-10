@@ -1,5 +1,5 @@
 {
-  "description": "Record each session's state for the ai-meter board's Agents page",
+  "description": "Record each session's state for the SI Somewhere board's Agents page",
   "hooks": {
     "SessionStart": [{ "hooks": [{ "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/agent_state.py\" || true", "timeout": 5 }] }],
     "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/agent_state.py\" || true", "timeout": 5 }] }],
