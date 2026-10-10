@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Record what an AI coding session is doing, for the ai-meter board.
+"""Record what an AI coding session is doing, for the SI Somewhere board.
 
-Every hook event rewrites one JSON file per session in AGENTS_DIR. The ai-meter
-daemon (github.com/shissncg/ai-meter, daemon/agent_feed.py) reads the files and
+Every hook event rewrites one JSON file per session in AGENTS_DIR. The SI Somewhere
+daemon (github.com/CyberStreamStudios/SISomewhere, daemon/agent_feed.py) reads the files and
 shows them on the board's Agents page. File fields:
 
   id        session id
@@ -29,12 +29,12 @@ One script serves every CLI; they differ only in spelling:
 
 Usage: agent_state.py [--provider NAME] [--event NAME]
 
-Hub: when a hub is configured (~/.config/claude-usage-monitor/hub.json with
-"url" and "write_token", or AI_METER_HUB_URL / AI_METER_HUB_TOKEN), each
+Hub: when a hub is configured (~/.config/sisomewhere/hub.json with
+"url" and "write_token", or SISOMEWHERE_HUB_URL / SISOMEWHERE_HUB_TOKEN), each
 visible change is also sent to it from a detached background process, so a
 slow network never holds up the session. Only the project folder's name, the
 state, the tool label and a 40-character prompt snippet leave the machine.
-The machine is named by AI_METER_MACHINE, else CODER_WORKSPACE_NAME, else the
+The machine is named by SISOMEWHERE_MACHINE, else CODER_WORKSPACE_NAME, else the
 short hostname.
 
 Always exits 0, and prints nothing except "{}" for Antigravity, whose hooks
@@ -56,8 +56,10 @@ import urllib.request
 from pathlib import Path
 from urllib.parse import urlparse
 
-AGENTS_DIR = Path.home() / ".config" / "claude-usage-monitor" / "agents"
-HUB_CONFIG = Path.home() / ".config" / "claude-usage-monitor" / "hub.json"
+AGENTS_DIR = Path.home() / ".config" / "sisomewhere" / "agents"
+HUB_CONFIG = Path.home() / ".config" / "sisomewhere" / "hub.json"
+# Before the SI Somewhere rename (machines not yet re-bootstrapped).
+LEGACY_HUB_CONFIG = Path.home() / ".config" / "claude-usage-monitor" / "hub.json"
 HUB_RESEND_S = 300      # keep a quiet session alive on the hub
 HUB_TIMEOUT_S = 5
 HUB_PROMPT_CHARS = 40
@@ -236,14 +238,15 @@ def apply_event(state: dict, ev: dict, now: float) -> dict | None:
 def hub_config() -> dict | None:
     """{"url", "token", "machine"} when a hub is configured, else None."""
     try:
-        conf = json.loads(HUB_CONFIG.read_text())
+        conf = json.loads((HUB_CONFIG if HUB_CONFIG.exists() else LEGACY_HUB_CONFIG).read_text())
     except (OSError, ValueError):
         conf = {}
-    url = os.environ.get("AI_METER_HUB_URL") or conf.get("url")
-    token = os.environ.get("AI_METER_HUB_TOKEN") or conf.get("write_token")
+    env = lambda name: os.environ.get("SISOMEWHERE_" + name) or os.environ.get("AI_METER_" + name)
+    url = env("HUB_URL") or conf.get("url")
+    token = env("HUB_TOKEN") or conf.get("write_token")
     if not url or not token:
         return None
-    machine = (os.environ.get("AI_METER_MACHINE") or conf.get("machine")
+    machine = (env("MACHINE") or conf.get("machine")
                or os.environ.get("CODER_WORKSPACE_NAME") or socket.gethostname().split(".")[0])
     return {"url": url.rstrip("/"), "token": token, "machine": machine}
 
@@ -266,7 +269,7 @@ def send_to_hub(hub: dict, update: dict) -> None:
     """POST from a detached child so the hook returns at once."""
     subprocess.Popen(
         [sys.executable, os.path.abspath(__file__), "--send", hub["url"], json.dumps(update)],
-        env={**os.environ, "AI_METER_HUB_TOKEN": hub["token"]},
+        env={**os.environ, "SISOMEWHERE_HUB_TOKEN": hub["token"]},
         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         start_new_session=True, close_fds=True)
 
@@ -274,8 +277,8 @@ def send_to_hub(hub: dict, update: dict) -> None:
 def post_update(url: str, body: str) -> None:
     request = urllib.request.Request(
         f"{url}/v1/sessions", data=body.encode(), method="POST",
-        headers={"Authorization": f"Bearer {os.environ.get('AI_METER_HUB_TOKEN', '')}",
-                 "Content-Type": "application/json", "User-Agent": "ai-meter-agents"})
+        headers={"Authorization": f"Bearer {os.environ.get('SISOMEWHERE_HUB_TOKEN', '')}",
+                 "Content-Type": "application/json", "User-Agent": "sisomewhere-agents"})
     urllib.request.urlopen(request, timeout=HUB_TIMEOUT_S).read()
 
 

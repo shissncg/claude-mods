@@ -20,10 +20,10 @@
       "source": "./mods/ci-status"
     },
     {
-      "name": "ai-meter-agents",
-      "description": "Feeds each AI coding session's state (working, needs you, done) to the ai-meter desk display, from Claude Code and, via install_other_tools.py, Codex, Grok and Antigravity",
-      "version": "0.2.0",
-      "source": "./mods/ai-meter-agents"
+      "name": "sisomewhere-agents",
+      "description": "Feeds each AI coding session's state (working, needs you, done) to the SI Somewhere desk display, from Claude Code and, via install_other_tools.py, Codex, Grok and Antigravity",
+      "version": "0.3.0",
+      "source": "./mods/sisomewhere-agents"
     }
   ]
 }
