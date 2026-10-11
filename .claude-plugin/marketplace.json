@@ -30,6 +30,12 @@
       "description": "Saves Claude Code's plan limits (5-hour and weekly) to a local file for the SI Somewhere agent",
       "version": "0.1.0",
       "source": "./mods/sisomewhere-usage"
+    },
+    {
+      "name": "sisomewhere-reply",
+      "description": "Lets SI Everywhere reply to this Claude Code session from your phone, the web or your glasses",
+      "version": "0.1.0",
+      "source": "./mods/sisomewhere-reply"
     }
   ]
 }
