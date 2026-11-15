@@ -10,7 +10,9 @@ import type { Register } from 'claude-code'
 //   ~/.config/sisomewhere/inbox/<session id>.ready   written at start: replies can come here
 //   ~/.config/sisomewhere/inbox/<session id>.jsonl   {"text": "...", "at": 1791600000.1} per line
 //
-// Interactive sessions only: a closed session gets its reply through a
+// Sessions a person is at only: the terminal REPL, and the Claude desktop app's
+// sessions, which run through the SDK (so not `isInteractive`) but are
+// attended. A `-p` run is skipped: a closed session gets its reply through a
 // background `claude -p --resume`, which the agent starts itself.
 
 const POLL_MS = 2000
@@ -30,11 +32,18 @@ export function texts(inbox: string): string[] {
   return out
 }
 
+/** A desktop app session: the app says a person is attending it. */
+async function attended($: { env: { get(name: string): Promise<string | undefined> } }): Promise<boolean> {
+  const entry = await $.env.get('CLAUDE_CODE_ENTRYPOINT')
+  const seen = await $.env.get('CLAUDE_CODE_SESSION_ATTENDED')
+  return entry === 'claude-desktop' || seen === '1'
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const result = await next(e)
-    if (!e.isInteractive) return result
     try {
+      if (!e.isInteractive && !(await attended($))) return result
       const home = await $.env.get('HOME')
       if (!home) return result
       const id = await $.session.id()
